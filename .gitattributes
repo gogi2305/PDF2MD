@@ -1,0 +1,9 @@
+# Переносы строк фиксированы, чтобы не зависеть от настроек git у того, кто клонирует.
+* text=auto
+
+# bash на Linux/macOS не понимает CRLF ($'\r': command not found)
+*.sh      text eol=lf
+*.command text eol=lf
+
+# cmd.exe надёжнее читает .bat с CRLF
+*.bat     text eol=crlf

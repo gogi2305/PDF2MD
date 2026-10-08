@@ -1,0 +1,26 @@
+# Виртуальное окружение и маркеры первого запуска (создаются лаунчерами)
+.venv/
+.installed_v3
+
+# Байткод Python
+__pycache__/
+*.pyc
+
+# Результаты работы приложения (конвертация, чанки, индекс, кэш OCR)
+output/
+
+# API-ключи и локальный конфиг (обычно в %APPDATA%/pdf2md или ~/pdf2md — вне проекта;
+# эти строки страхуют, если конфиг случайно окажется в папке)
+config.json
+.pdf2md/
+pdf2md/config.json
+
+# Тестовый кэш
+.pytest_cache/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,5 @@
+# Поддержка офисных форматов (Word/Excel/PowerPoint/Outlook .msg) через MarkItDown.
+# Ставится "по возможности": тянет onnxruntime (через magika), у которого пока
+# нет сборки под Python 3.14 — на 3.14 office-форматы будут недоступны.
+# Для них используйте Python 3.12 или 3.13. Остальное (PDF, сканы, картинки) работает всегда.
+markitdown[docx,pptx,xlsx,xls,outlook]>=0.1.0
