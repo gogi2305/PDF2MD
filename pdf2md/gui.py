@@ -9,7 +9,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from .answerers import OllamaAnswerer
 from .config_store import load_config, save_config
-from .constants import ANSWER_PROVIDERS, DEFAULT_DOC_LANGUAGE, DOC_LANGUAGES, IMAGE_EXTENSIONS, INDEX_VEC_FILE, MARKITDOWN_EXTENSIONS, SERVICES, SERVICE_KEY_URLS
+from .constants import (ANSWER_PROVIDERS, ARCHIVE_EXTENSIONS, DEFAULT_DOC_LANGUAGE, DOC_LANGUAGES, IMAGE_EXTENSIONS,
+                        INDEX_VEC_FILE, MARKITDOWN_EXTENSIONS, SERVICES, SERVICE_KEY_URLS, TIFF_EXTENSIONS)
 from .i18n import ANSWER_LABELS_I18N, SERVICE_LABELS_I18N, UI
 from .messages import set_language, tr
 from .workers import ConvertWorker, IndexWorker, SearchWorker
@@ -305,12 +306,14 @@ class App:
 
     def _c_add_files(self):
         # Можно выбрать сразу несколько файлов
-        img_pat = " ".join(f"*{e}" for e in sorted(IMAGE_EXTENSIONS))
+        img_pat = " ".join(f"*{e}" for e in sorted(IMAGE_EXTENSIONS | TIFF_EXTENSIONS))
         doc_pat = " ".join(f"*{e}" for e in sorted(MARKITDOWN_EXTENSIONS))
+        arc_pat = " ".join(f"*{e}" for e in sorted(ARCHIVE_EXTENSIONS))
         paths = filedialog.askopenfilenames(
             title=self.t("pick_files"),
             filetypes=[
-                (tr("gui_filter_all_supported"), f"*.pdf *.zip {img_pat} {doc_pat}"),
+                (tr("gui_filter_all_supported"), f"*.pdf {arc_pat} {img_pat} {doc_pat}"),
+                (tr("gui_filter_archives"), arc_pat),
                 (tr("gui_filter_docs"), doc_pat),
                 (tr("gui_filter_pdf_img"), f"*.pdf {img_pat}"),
                 (tr("gui_filter_all"), "*.*"),

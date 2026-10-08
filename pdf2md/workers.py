@@ -14,7 +14,7 @@ from .chunking import chunk_hash, chunk_markdown
 from .constants import DEFAULT_DOC_LANGUAGE, MANIFEST_FILE
 from .messages import route_label, tr
 from .fileutils import collect_documents, file_content_hash, safe_filename, unique_name
-from .imaging import preprocess_image_for_ocr
+from .imaging import preprocess_image_for_ocr, tiff_to_pdf
 from .index import GeminiEmbedder, VectorIndex, collect_chunks_from_dir
 from .ocr_cache import ocr_cache_get, ocr_cache_put
 from .ocr_clients import QuotaExhaustedError, make_client
@@ -90,8 +90,9 @@ class ConvertWorker(threading.Thread):
             try:
                 got = collect_documents(ip, work_dir, self.log)
                 n_pdf = sum(1 for *_, k in got if k == "pdf")
-                n_img = sum(1 for *_, k in got if k == "image")
-                self.log(tr("found_counts", pdf=n_pdf, img=n_img))
+                n_img = sum(1 for *_, k in got if k in ("image", "tiff"))
+                n_doc = sum(1 for *_, k in got if k == "doc")
+                self.log(tr("found_counts", pdf=n_pdf, img=n_img, docs=n_doc))
                 # Префикс пути для уникальности имён между источниками.
                 # docs/ и docs.zip (или две папки docs) получат docs и docs_2.
                 prefix = unique_name(safe_filename(ip.stem), taken_prefixes) if multi else ""
@@ -229,7 +230,7 @@ class ConvertWorker(threading.Thread):
                     except ImportError:
                         return ("error", tr("markitdown_missing", src=src))
                     route = "текст(office)"
-                elif self.options.get("auto_route", True) and pdf_has_text_layer(abs_path):
+                elif kind == "pdf" and self.options.get("auto_route", True) and pdf_has_text_layer(abs_path):
                     # Цифровой PDF — берём текст напрямую, без OCR и без квоты.
                     md_text = extract_markdown_native(abs_path)
                     route = "текст"
@@ -244,14 +245,16 @@ class ConvertWorker(threading.Thread):
                             ocr_cache_put(cache_dir, abs_path, self.service, md_text, cache_extra)
                             route = "OCR (слой пуст)"
                 else:
+                    # Скан-PDF или TIFF. Кэш — по исходному файлу (TIFF, а не временный PDF).
                     cached = ocr_cache_get(cache_dir, abs_path, self.service, cache_extra)
                     if cached is not None:
                         md_text = cached
                         route = "кэш OCR"
                     else:
-                        md_text = client.parse_pdf(abs_path, cancel_event=self.cancel)
+                        md_text = client.parse_pdf(self._ocr_pdf(abs_path, kind, work_dir),
+                                                   cancel_event=self.cancel)
                         ocr_cache_put(cache_dir, abs_path, self.service, md_text, cache_extra)
-                        route = "OCR"
+                        route = "OCR (TIFF)" if kind == "tiff" else "OCR"
                 out_md.parent.mkdir(parents=True, exist_ok=True)
                 out_md.write_text(md_text, encoding="utf-8")
                 with self._lock:
@@ -362,7 +365,8 @@ class ConvertWorker(threading.Thread):
                         except Exception: img = ap
                     second = sec_client.parse_image(img, cancel_event=self.cancel)
                 else:
-                    second = sec_client.parse_pdf(ap, cancel_event=self.cancel)
+                    second = sec_client.parse_pdf(self._ocr_pdf(ap, kind, work_dir),
+                                                  cancel_event=self.cancel)
             except QuotaExhaustedError as e:
                 self.log(tr("cc_stopped", e=e)); break
             except Exception as e:
@@ -386,13 +390,21 @@ class ConvertWorker(threading.Thread):
         return {"checked": len(results), "agree": agree, "disagree": disagree,
                 "service": sec, "details": results}
 
+    @staticmethod
+    def _ocr_pdf(abs_path, kind, work_dir):
+        """PDF для OCR: сам файл, а TIFF — сконвертированный во временный PDF."""
+        if kind == "tiff":
+            return tiff_to_pdf(Path(abs_path), work_dir / "_tiff")
+        return Path(abs_path)
+
     def _assess(self, src, abs_path, kind, md_text):
         """Эвристическая оценка текста + сверка числа страниц для PDF.
         Пропавшая или пустая страница — это потеря текста, поэтому документ
         сразу «сомнительно» (и попадает на сверку вторым движком)."""
         level, reasons = assess_markdown_quality(md_text)
-        if kind != "pdf":
+        if kind not in ("pdf", "tiff"):
             return level, reasons
+        # PyMuPDF открывает и PDF, и TIFF: у TIFF страница = кадр
         n = pdf_file_page_count(Path(abs_path))
         if not n:
             return level, reasons

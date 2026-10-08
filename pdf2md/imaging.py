@@ -3,6 +3,29 @@
 import uuid
 from pathlib import Path
 
+def tiff_to_pdf(src: Path, dest_dir: Path) -> Path:
+    """Конвертирует TIFF (в т.ч. многостраничный) в PDF — одна страница на кадр.
+
+    PDF принимают все OCR-сервисы, а TIFF — не все. Дальше файл идёт как
+    скан-PDF: OCR, деление на куски, сверка числа страниц. Изображение
+    встраивается без пересжатия качества (PyMuPDF), запасной путь — Pillow.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    out = dest_dir / f"{uuid.uuid4().hex}.pdf"
+    try:
+        import fitz
+        with fitz.open(str(src)) as doc:
+            out.write_bytes(doc.convert_to_pdf())
+        return out
+    except ImportError:
+        pass
+    from PIL import Image, ImageSequence
+    with Image.open(src) as img:
+        frames = [f.convert("RGB") if f.mode not in ("1", "L", "RGB") else f.copy()
+                  for f in ImageSequence.Iterator(img)]
+    frames[0].save(out, format="PDF", save_all=True, append_images=frames[1:], resolution=300)
+    return out
+
 def preprocess_image_for_ocr(src: Path, dest_dir: Path, max_edge: int = 2000) -> Path:
     """Лёгкая подготовка фото/скана под VLM-OCR.
 

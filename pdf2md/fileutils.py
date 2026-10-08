@@ -1,12 +1,18 @@
-"""Работа с файловой системой: фильтрация мусора, распаковка ZIP (с починкой кириллических имён), определение типа файла, сбор документов для конвертации."""
+"""Работа с файловой системой: фильтрация мусора, распаковка ZIP / RAR / 7z (с починкой кириллических имён в ZIP), определение типа файла, сбор документов для конвертации."""
 
 import shutil
 import zipfile
 import re
 import hashlib
 from pathlib import Path
+from .archives import extract_with_tool
 from .messages import tr
-from .constants import IMAGE_EXTENSIONS, IMAGE_MIME, JUNK_NAMES, JUNK_PREFIXES, MARKITDOWN_EXTENSIONS
+from .constants import (ARCHIVE_EXTENSIONS, IMAGE_EXTENSIONS, IMAGE_MIME, JUNK_NAMES, JUNK_PREFIXES,
+                        MARKITDOWN_EXTENSIONS, TIFF_EXTENSIONS)
+
+# Тома многотомного RAR: name.part2.rar, name.part03.rar ... Распаковывается
+# только первый том (7-Zip сам подхватит остальные), прочие пропускаем.
+_EXTRA_RAR_VOLUME = re.compile(r"\.part0*(?:[2-9]|[1-9]\d+)\.rar$", re.IGNORECASE)
 
 def is_junk(path: Path) -> bool:
     if path.name in JUNK_NAMES:
@@ -25,6 +31,25 @@ def is_image_file(path: Path) -> bool:
 
 def is_markitdown_file(path: Path) -> bool:
     return path.suffix.lower() in MARKITDOWN_EXTENSIONS
+
+def is_archive(path: Path) -> bool:
+    return path.suffix.lower() in ARCHIVE_EXTENSIONS
+
+def is_extra_volume(path: Path) -> bool:
+    return bool(_EXTRA_RAR_VOLUME.search(path.name))
+
+def document_kind(path: Path):
+    """Тип документа по расширению: "pdf" / "tiff" / "image" / "doc" или None."""
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    if ext in TIFF_EXTENSIONS:
+        return "tiff"
+    if ext in IMAGE_EXTENSIONS:
+        return "image"
+    if ext in MARKITDOWN_EXTENSIONS:
+        return "doc"
+    return None
 
 def image_mime(path: Path) -> str:
     return IMAGE_MIME.get(path.suffix.lower(), "image/jpeg")
@@ -76,7 +101,7 @@ def _fix_zip_name(name: str) -> str:
             continue
     return name
 
-def extract_zip_recursive(zip_path: Path, dest: Path, log_fn=None) -> None:
+def _extract_zip(zip_path: Path, dest: Path, log_fn=None) -> None:
     """Распаковывает ZIP, попутно чиня имена файлов в кириллице (Windows-zip)."""
     with zipfile.ZipFile(zip_path, "r") as zf:
         for info in zf.infolist():
@@ -106,17 +131,29 @@ def extract_zip_recursive(zip_path: Path, dest: Path, log_fn=None) -> None:
                     log_fn(tr("zip_extract_failed", name=fixed_name, e=e))
                 continue
 
-    for nested in list(dest.rglob("*.zip")):
-        if is_junk(nested):
+def extract_archive_recursive(archive: Path, dest: Path, log_fn=None) -> None:
+    """Распаковывает ZIP / RAR / 7z в `dest`, затем — вложенные архивы любого
+    из этих типов (каждый в папку со своим именем, сам архив удаляется)."""
+    if archive.suffix.lower() == ".zip":
+        _extract_zip(archive, dest, log_fn)
+    else:
+        extract_with_tool(archive, dest, log_fn)
+
+    for nested in list(dest.rglob("*")):
+        if (not is_archive(nested) or is_junk(nested) or nested.is_symlink()
+                or not nested.is_file() or is_extra_volume(nested)):
             continue
-        sub_dest = nested.with_suffix("")
-        sub_dest.mkdir(exist_ok=True)
+        sub_dest = _unique_dir(nested.with_suffix(""))
+        sub_dest.mkdir(parents=True, exist_ok=True)
         try:
-            extract_zip_recursive(nested, sub_dest, log_fn)
+            extract_archive_recursive(nested, sub_dest, log_fn)
             nested.unlink()
         except Exception as e:
             if log_fn:
                 log_fn(tr("zip_nested_failed", name=nested.name, e=e))
+
+# Прежнее имя — для обратной совместимости
+extract_zip_recursive = extract_archive_recursive
 
 def unique_name(name: str, taken: set) -> str:
     """Возвращает `name`, а если оно занято — `name_2`, `name_3`, ...
@@ -146,67 +183,58 @@ def _unique_dir(base: Path) -> Path:
     return candidate
 
 def collect_documents(input_path: Path, work_dir: Path, log_fn) -> list:
-    """Собирает PDF, изображения и офисные документы из файла / папки / ZIP.
+    """Собирает документы из файла / папки / архива (ZIP, RAR, 7z), рекурсивно.
 
     Возвращает список кортежей (абсолютный_путь, относительный_путь, kind),
-    где kind — "pdf", "image" или "doc" (office/web/data — через MarkItDown).
+    где kind — "pdf", "tiff", "image" или "doc" (office/web/data — через MarkItDown).
     """
     docs: list = []
 
+    def _add(item: Path, rel: str):
+        kind = document_kind(item)
+        if kind:
+            docs.append((item, rel, kind))
+
+    def _unpack(archive: Path, prefix: str):
+        """Распаковывает архив во work_dir и добавляет его документы под `prefix`
+        (sub/a.zip → sub/a/...), чтобы x.pdf из a.zip и b.rar не совпали."""
+        if is_extra_volume(archive):
+            log_fn(tr("archive_volume_skipped", name=archive.name))
+            return
+        log_fn(tr("unpacking", name=archive.name))
+        extract_dir = _unique_dir(work_dir / safe_filename(archive.stem))
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            extract_archive_recursive(archive, extract_dir, log_fn)
+        except Exception as e:
+            log_fn(tr("unpack_error", name=archive.name, e=e))
+            return
+        _scan(extract_dir, prefix)
+
     def _scan(root: Path, prefix: str = ""):
-        """Рекурсивно добавляет PDF, картинки и офисные документы.
-        `prefix` — путь архива внутри папки, чтобы x.pdf из a.zip и b.zip не совпали."""
         for item in root.rglob("*"):
-            if is_junk(item) or not item.is_file():
+            # Символическая ссылка из архива может указывать на чужой файл на диске
+            if is_junk(item) or item.is_symlink() or not item.is_file():
                 continue
-            ext = item.suffix.lower()
             rel = str(item.relative_to(root))
-            if prefix:
-                rel = f"{prefix}/{rel}"
-            if ext == ".pdf":
-                docs.append((item, rel, "pdf"))
-            elif is_image_file(item):
-                docs.append((item, rel, "image"))
-            elif is_markitdown_file(item):
-                docs.append((item, rel, "doc"))
+            _add(item, f"{prefix}/{rel}" if prefix else rel)
 
     if input_path.is_file():
-        ext = input_path.suffix.lower()
-        if ext == ".zip":
-            log_fn(tr("unpacking", name=input_path.name))
-            extract_dir = _unique_dir(work_dir / safe_filename(input_path.stem))
-            extract_dir.mkdir(parents=True, exist_ok=True)
-            extract_zip_recursive(input_path, extract_dir, log_fn)
-            _scan(extract_dir)
-        elif ext == ".pdf":
-            docs.append((input_path, input_path.name, "pdf"))
-        elif is_image_file(input_path):
-            docs.append((input_path, input_path.name, "image"))
-        elif is_markitdown_file(input_path):
-            docs.append((input_path, input_path.name, "doc"))
+        if is_archive(input_path):
+            _unpack(input_path, "")
+        elif document_kind(input_path):
+            _add(input_path, input_path.name)
         else:
             log_fn(tr("unsupported_file", name=input_path.name))
     elif input_path.is_dir():
         for item in input_path.rglob("*"):
-            if is_junk(item) or not item.is_file():
+            if is_junk(item) or item.is_symlink() or not item.is_file():
                 continue
-            ext = item.suffix.lower()
-            if ext == ".zip":
-                log_fn(tr("unpacking", name=item.name))
-                extract_dir = _unique_dir(work_dir / safe_filename(item.stem))
-                extract_dir.mkdir(parents=True, exist_ok=True)
-                try:
-                    extract_zip_recursive(item, extract_dir, log_fn)
-                    # sub/a.zip → файлы идут как sub/a/...
-                    _scan(extract_dir, item.relative_to(input_path).with_suffix("").as_posix())
-                except Exception as e:
-                    log_fn(tr("unpack_error", name=item.name, e=e))
-            elif ext == ".pdf":
-                docs.append((item, str(item.relative_to(input_path)), "pdf"))
-            elif is_image_file(item):
-                docs.append((item, str(item.relative_to(input_path)), "image"))
-            elif is_markitdown_file(item):
-                docs.append((item, str(item.relative_to(input_path)), "doc"))
+            rel = item.relative_to(input_path)
+            if is_archive(item):
+                _unpack(item, rel.with_suffix("").as_posix())
+            else:
+                _add(item, str(rel))
 
     # Совпадение относительных путей — это разные файлы (например, папка a/
     # рядом с a.zip), поэтому не выбрасываем, а переименовываем с пометкой в логе.
