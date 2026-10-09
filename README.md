@@ -1,5 +1,9 @@
 # PDF2MD — document converter and search
 
+[![tests](https://github.com/gogi2305/PDF2MD/actions/workflows/tests.yml/badge.svg)](https://github.com/gogi2305/PDF2MD/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)
+
 Desktop app (Tkinter, Windows / Linux / macOS) that turns PDFs, scans, photos and
 office files into Markdown, checks the result for lost or garbled text, and lets
 you ask questions about your documents with answers that cite their sources.
