@@ -2,6 +2,11 @@
 .venv/
 .installed_v3
 
+# Сборка .exe (PyInstaller)
+build/
+dist/
+*.spec
+
 # Байткод Python
 __pycache__/
 *.pyc

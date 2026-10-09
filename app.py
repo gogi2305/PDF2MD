@@ -2,8 +2,8 @@
 PDF2MD — конвертер PDF в Markdown + RAG-поиск по документам.
 
 Вкладка 1 «Конвертация»:
-  PDF / изображения (JPG, PNG, WEBP) / ZIP / папка → Markdown + JSON-чанки
-  через LlamaParse / Gemini / Mistral / GLM-OCR.
+  Папки, архивы ZIP/RAR/7z, PDF, TIFF, изображения (JPG, PNG, WEBP)
+  → Markdown + JSON-чанки через LlamaParse / Gemini / Mistral / GLM-OCR.
   Цифровые PDF — из текстового слоя (без OCR). Office — через MarkItDown.
   OCR-результаты кэшируются (output/_ocr_cache/) — повтор не тратит квоту.
 
@@ -19,7 +19,12 @@ PDF2MD — конвертер PDF в Markdown + RAG-поиск по докуме
 (clients, chunking, index, workers, gui — см. README.txt).
 """
 
-from pdf2md.gui import main
+import sys
 
 if __name__ == "__main__":
+    # app.py --selftest <отчёт.json> — проверка сборки без окна (см. pdf2md/selftest.py)
+    if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
+        from pdf2md.selftest import run
+        sys.exit(run(sys.argv[2]))
+    from pdf2md.gui import main
     main()

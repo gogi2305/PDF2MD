@@ -28,7 +28,18 @@ OCR engines.
 
 The interface, logs and error messages are available in English and Russian.
 
-## Getting started
+## Download for Windows (no Python needed)
+
+Download **`PDF2MD.exe`** from the [latest release](https://github.com/gogi2305/PDF2MD/releases/latest)
+and run it. Results are saved to an `output` folder next to the `.exe` (or to
+`Documents\PDF2MD` if that folder is not writable). For RAR/7z archives, also install
+[7-Zip](https://www.7-zip.org).
+
+The first launch takes a few seconds: the program unpacks itself to a temporary folder.
+The `.exe` is not code-signed, so Windows SmartScreen may show *"Windows protected your PC"* —
+click **More info → Run anyway**.
+
+## Running from source
 
 1. Install Python 3.10+ from <https://www.python.org/downloads/>
    (on Windows, tick **Add Python to PATH**).
@@ -221,6 +232,16 @@ tests/                  58 pytest tests, no network or API keys needed
   test_pages.py           page markers and the report's page check
   test_archives.py        RAR/7z, nested archives, volumes, TIFF
 ```
+
+## Building the .exe
+
+```bash
+pip install -r requirements.txt -r requirements-optional.txt pyinstaller
+python build_exe.py
+```
+
+The script builds `dist/PDF2MD.exe` and runs its self-test (`PDF2MD.exe --selftest report.json`),
+which fails the build if PyMuPDF, MarkItDown or Tkinter did not make it into the bundle.
 
 ## Running the tests
 

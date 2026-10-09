@@ -1,6 +1,7 @@
 """Tkinter-интерфейс приложения: вкладки «Конвертация» и «Поиск по документам»."""
 
 import os
+import sys
 import threading
 import queue
 from pathlib import Path
@@ -14,6 +15,21 @@ from .constants import (ANSWER_PROVIDERS, ARCHIVE_EXTENSIONS, DEFAULT_DOC_LANGUA
 from .i18n import ANSWER_LABELS_I18N, SERVICE_LABELS_I18N, UI
 from .messages import set_language, tr
 from .workers import ConvertWorker, IndexWorker, SearchWorker
+
+def default_data_dir() -> Path:
+    """Где по умолчанию лежит папка output/.
+
+    Из исходников — корень проекта (рядом с app.py). В собранном .exe код
+    распакован во временную папку, которая удаляется при выходе, поэтому
+    берём папку самого .exe, а если туда нельзя писать (Program Files) —
+    Документы/PDF2MD.
+    """
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        if os.access(exe_dir, os.W_OK):
+            return exe_dir
+        return Path.home() / "Documents" / "PDF2MD"
+    return Path(__file__).resolve().parent.parent
 
 class _TaggedQueue:
     """Очередь для одного воркера: каждое его сообщение уходит в общую очередь
@@ -39,7 +55,7 @@ class App:
         self.cancel_event = threading.Event()
         self._suspend_trace = False
 
-        self.app_dir = Path(__file__).resolve().parent
+        self.app_dir = default_data_dir()
         lang = self.config.get("language", "ru")
         if lang not in ("ru", "en"):
             lang = "ru"
