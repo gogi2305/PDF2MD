@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from .messages import tr
 from .pages import strip_page_markers
 
 QA_NOISE_RED = 0.25
@@ -35,7 +36,7 @@ def assess_markdown_quality(text: str):
     """
     stripped = strip_page_markers(text or "").strip()
     if len(stripped) < QA_MIN_CHARS:
-        return "сомнительно", [f"почти пусто ({len(stripped)} симв.)"]
+        return "сомнительно", [tr("q_almost_empty", n=len(stripped))]
 
     words = _QA_WORD.findall(stripped)
     total = len(words) or 1
@@ -51,12 +52,12 @@ def assess_markdown_quality(text: str):
     illeg = illegible / total
 
     flags = []
-    if noise >= QA_NOISE_YELLOW: flags.append(f"искажённых слов {noise:.0%}")
-    if illeg >= QA_ILLEGIBLE_YELLOW: flags.append(f"меток [неразборчиво] {illeg:.0%}")
-    if repl: flags.append(f"символов-замен {repl}")
+    if noise >= QA_NOISE_YELLOW: flags.append(tr("q_garbled", share=noise))
+    if illeg >= QA_ILLEGIBLE_YELLOW: flags.append(tr("q_illegible", share=illeg))
+    if repl: flags.append(tr("q_replacement", n=repl))
 
     if noise >= QA_NOISE_RED or illeg >= QA_ILLEGIBLE_RED or repl > 5:
-        return "сомнительно", flags or ["высокий шум"]
+        return "сомнительно", flags or [tr("q_high_noise")]
     if flags:
         return "проверить", flags
     return "надёжно", []
@@ -90,7 +91,7 @@ def _write_html_diff(first: str, second: str, path: Path, sec_name: str) -> None
     from difflib import HtmlDiff
     html = HtmlDiff(wrapcolumn=90).make_file(
         first.splitlines(), second.splitlines(),
-        fromdesc="Движок 1 (основной)", todesc=f"Движок 2 ({sec_name})",
+        fromdesc=tr("diff_engine1"), todesc=tr("diff_engine2", svc=sec_name),
         context=True, numlines=2)
     path.write_text(html, encoding="utf-8")
 

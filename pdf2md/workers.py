@@ -414,13 +414,13 @@ class ConvertWorker(threading.Thread):
         if check["status"] == PAGES_PROBLEM:
             level = "сомнительно"
             if check["missing"]:
-                reasons = reasons + [f"нет страниц: {format_page_list(check['missing'])}"]
+                reasons = reasons + [tr("q_missing_pages", pages=format_page_list(check["missing"]))]
             if check["empty"]:
-                reasons = reasons + [f"пустые страницы: {format_page_list(check['empty'])}"]
+                reasons = reasons + [tr("q_empty_pages", pages=format_page_list(check["empty"]))]
         return level, reasons
 
     def _page_report_lines(self):
-        """Раздел report.md о сверке числа страниц PDF."""
+        """Раздел report.md о сверке числа страниц PDF и TIFF."""
         checks = self._page_checks
         if not checks:
             return []
@@ -428,78 +428,70 @@ class ConvertWorker(threading.Thread):
         unverified = sorted(s for s, c in checks.items() if c["status"] == PAGES_UNVERIFIED)
         ok = sum(1 for c in checks.values() if c["status"] == PAGES_OK)
         lines = [
-            "", "## Сверка страниц PDF",
-            f"PDF: {len(checks)} · все страницы на месте {ok} · "
-            f"расхождения {len(problem)} · не проверено {len(unverified)}",
-            "Сверяется число страниц исходника с размеченными страницами результата "
-            "(метки <!-- page N --> в .md). Пустая страница — это, например, вклеенный "
-            "скан без текстового слоя или страница, которую OCR не распознал.",
+            "", tr("rep_pages_title"),
+            tr("rep_pages_summary", total=len(checks), ok=ok,
+               problem=len(problem), unverified=len(unverified)),
+            tr("rep_pages_note"),
         ]
         if problem:
-            lines += ["", "### Расхождения — проверьте по оригиналу"]
+            lines += ["", tr("rep_pages_problems")]
             for src, c in problem:
-                parts = [f"распознано {c['found']} из {c['source']}"]
+                parts = [tr("rep_pages_found", found=c["found"], total=c["source"])]
                 if c["missing"]:
-                    parts.append(f"нет: {format_page_list(c['missing'])}")
+                    parts.append(tr("rep_pages_missing", pages=format_page_list(c["missing"])))
                 if c["empty"]:
-                    parts.append(f"пустые: {format_page_list(c['empty'])}")
+                    parts.append(tr("rep_pages_empty", pages=format_page_list(c["empty"])))
                 lines.append(f"- `{src}` — " + "; ".join(parts))
         if unverified:
-            lines += ["", f"### Не проверено: {len(unverified)}",
-                      "В результате нет разметки страниц: LlamaParse и GLM-OCR её не дают, "
-                      "Gemini мог не выполнить инструкцию, либо .md сделан прошлой версией "
-                      "или взят из OCR-кэша."]
+            lines += ["", tr("rep_pages_unverified", n=len(unverified)), tr("rep_pages_unverified_note")]
             shown = unverified[:30]
             lines += [f"- `{s}`" for s in shown]
             if len(unverified) > len(shown):
-                lines.append(f"- … и ещё {len(unverified) - len(shown)}")
+                lines.append(tr("rep_more", n=len(unverified) - len(shown)))
         return lines
 
     def _write_quality_report(self, assessments, out_root, crosscheck=None):
-        """Пишет report.md (для человека) и report.json (для машины).
+        """Пишет report.md (для человека, на языке интерфейса) и report.json
+        (для машины: уровни — неизменные коды «надёжно/проверить/сомнительно»).
         Возвращает счётчики уровней для итоговой сводки."""
         red = sorted((a for a in assessments if a[2] == "сомнительно"), key=lambda a: a[0])
         yel = sorted((a for a in assessments if a[2] == "проверить"), key=lambda a: a[0])
         grn = [a for a in assessments if a[2] == "надёжно"]
         lines = [
-            "# Отчёт о достоверности распознавания", "",
-            f"Всего: {len(assessments)} · надёжно {len(grn)} · "
-            f"проверить {len(yel)} · сомнительно {len(red)}", "",
-            "Оценка эвристическая: ловит явный мусор (пусто, метки [неразборчиво], "
-            "искажённые слова), но НЕ «гладко выглядящую ошибку». "
-            "Помеченное ниже стоит сверить с оригиналом.",
+            tr("rep_title"), "",
+            tr("rep_summary", total=len(assessments), reliable=len(grn),
+               review=len(yel), suspicious=len(red)), "",
+            tr("rep_disclaimer"),
         ]
         if red:
-            lines += ["", "## Сомнительно — проверьте по оригиналу"]
+            lines += ["", tr("rep_suspicious")]
             for src, route, _, reasons in red:
-                why = "; ".join(reasons) if reasons else "высокий шум"
+                why = "; ".join(reasons) if reasons else tr("q_high_noise")
                 lines.append(f"- `{src}` — {why}")
         if yel:
-            lines += ["", "## Стоит глянуть"]
+            lines += ["", tr("rep_review")]
             for src, route, _, reasons in yel:
-                why = "; ".join(reasons) if reasons else "умеренный шум"
+                why = "; ".join(reasons) if reasons else tr("q_moderate_noise")
                 lines.append(f"- `{src}` — {why}")
         if not red and not yel:
-            lines += ["", "Подозрительных страниц не найдено."]
+            lines += ["", tr("rep_none")]
         lines += self._page_report_lines()
 
         if crosscheck and crosscheck.get("details"):
             disagree = [d for d in crosscheck["details"] if d[2] == "расходятся"]
             agree = [d for d in crosscheck["details"] if d[2] == "согласны"]
             lines += [
-                "", f"## Сверка двух движков (второй: {crosscheck['service']})",
-                f"Сверено {crosscheck['checked']}: согласны {len(agree)}, расходятся {len(disagree)}.",
-                "Сверка показывает РАСХОЖДЕНИЕ, а не правоту. Где модели не сошлись — "
-                "откройте diff и сверьте с оригиналом. Где сошлись — вероятно ок, но если "
-                "обе ошиблись одинаково, это здесь не видно.",
+                "", tr("rep_cc_title", svc=crosscheck["service"]),
+                tr("rep_cc_summary", checked=crosscheck["checked"], agree=len(agree), disagree=len(disagree)),
+                tr("rep_cc_note"),
             ]
             if disagree:
-                lines += ["", "### Расходятся — откройте diff"]
+                lines += ["", tr("rep_cc_disagree")]
                 for src, sim, _, dname in sorted(disagree, key=lambda d: d[1]):
                     link = f" → report_diffs/{dname}" if dname else ""
-                    lines.append(f"- `{src}` — сходство {sim:.0%}{link}")
+                    lines.append(f"- `{src}` — " + tr("rep_cc_similarity", sim=sim) + link)
             if agree:
-                lines += ["", f"### Согласны (вероятно ок): {len(agree)}"]
+                lines += ["", tr("rep_cc_agree", n=len(agree))]
                 for src, sim, _, _ in sorted(agree, key=lambda d: d[0]):
                     lines.append(f"- `{src}` — {sim:.0%}")
         try:

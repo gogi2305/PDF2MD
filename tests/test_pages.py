@@ -141,3 +141,49 @@ def test_report_lists_page_mismatches(tmp, monkeypatch):
     assert data["lost.pdf"]["level"] == "сомнительно"          # потеря страниц = сомнительно
     assert data["lost.pdf"]["pages"]["missing"] == [3, 4]
     assert data["full.pdf"]["pages"]["status"] == "ok"
+
+
+@pytest.fixture()
+def english():
+    from pdf2md import messages
+    messages.set_language("en")
+    yield
+    messages.set_language("ru")
+
+
+def test_report_follows_interface_language(tmp, monkeypatch, english):
+    import re
+    from pdf2md import workers
+    from pdf2md.pages import join_pages
+
+    src = tmp / "src"
+    src.mkdir()
+    _make_pdf(src / "lost.pdf", ["a", "b", "c", "d"])
+    _make_pdf(src / "plain.pdf", ["a", "b"])
+    (src / "empty.pdf").write_bytes(b"%PDF")       # не читается → «почти пусто», без сверки страниц
+
+    class FakeClient:
+        def parse_pdf(self, path, cancel_event=None):
+            if path.name == "lost.pdf":
+                return join_pages(["First page of the contract.", "Second page."])
+            if path.name == "empty.pdf":
+                return ""
+            return "Recognized text without page markers."
+
+    monkeypatch.setattr(workers, "make_client", lambda *a: FakeClient())
+    workers.ConvertWorker([src], tmp / "out", "mistral", KEY,
+                          {"auto_route": False, "make_chunks": False, "assess_quality": True,
+                           "use_ocr_cache": False, "workers": 1}, queue.Queue(), threading.Event())._run()
+
+    report = (tmp / "out" / "report.md").read_text(encoding="utf-8")
+    assert report.startswith("# OCR reliability report")
+    assert "## Suspicious — check against the original" in report
+    assert "`lost.pdf` — missing pages: 3–4" in report               # причина тоже по-английски
+    assert "`empty.pdf` — almost empty (0 chars)" in report
+    assert "`lost.pdf` — 2 of 4 recognized; missing: 3–4" in report
+    assert "`plain.pdf`" in report.split("### Not verified: 1")[1]
+    # Кириллица — только в метке [неразборчиво], которую пишет сама OCR-модель
+    assert not re.search("[А-Яа-яЁё]", report.replace("[неразборчиво]", ""))
+
+    data = {d["source"]: d for d in json.loads((tmp / "out" / "report.json").read_text(encoding="utf-8"))}
+    assert data["lost.pdf"]["level"] == "сомнительно"          # машинный код уровня не переводится

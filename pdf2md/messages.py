@@ -140,6 +140,47 @@ MESSAGES = {
                               "Затем выполните в командной строке: ollama pull {model}",
         "ollama_request_failed": "Не удалось обратиться к Ollama: {e}",
         "empty_answer": "[пустой ответ]",
+        # --- report.md и причины пометок ---
+        "rep_title": "# Отчёт о достоверности распознавания",
+        "rep_summary": "Всего: {total} · надёжно {reliable} · проверить {review} · сомнительно {suspicious}",
+        "rep_disclaimer": "Оценка эвристическая: ловит явный мусор (пусто, метки [неразборчиво], "
+                          "искажённые слова), но НЕ «гладко выглядящую ошибку». "
+                          "Помеченное ниже стоит сверить с оригиналом.",
+        "rep_suspicious": "## Сомнительно — проверьте по оригиналу",
+        "rep_review": "## Стоит глянуть",
+        "rep_none": "Подозрительных страниц не найдено.",
+        "rep_pages_title": "## Сверка страниц PDF",
+        "rep_pages_summary": "PDF: {total} · все страницы на месте {ok} · расхождения {problem} · не проверено {unverified}",
+        "rep_pages_note": "Сверяется число страниц исходника с размеченными страницами результата "
+                          "(метки `<!-- page N -->` в .md). Пустая страница — это, например, вклеенный "
+                          "скан без текстового слоя или страница, которую OCR не распознал.",
+        "rep_pages_problems": "### Расхождения — проверьте по оригиналу",
+        "rep_pages_found": "распознано {found} из {total}",
+        "rep_pages_missing": "нет: {pages}",
+        "rep_pages_empty": "пустые: {pages}",
+        "rep_pages_unverified": "### Не проверено: {n}",
+        "rep_pages_unverified_note": "В результате нет разметки страниц: LlamaParse и GLM-OCR её не дают, "
+                                     "Gemini мог не выполнить инструкцию, либо .md сделан прошлой версией "
+                                     "или взят из OCR-кэша.",
+        "rep_more": "- … и ещё {n}",
+        "rep_cc_title": "## Сверка двух движков (второй: {svc})",
+        "rep_cc_summary": "Сверено {checked}: согласны {agree}, расходятся {disagree}.",
+        "rep_cc_note": "Сверка показывает РАСХОЖДЕНИЕ, а не правоту. Где модели не сошлись — "
+                       "откройте diff и сверьте с оригиналом. Где сошлись — вероятно ок, но если "
+                       "обе ошиблись одинаково, это здесь не видно.",
+        "rep_cc_disagree": "### Расходятся — откройте diff",
+        "rep_cc_similarity": "сходство {sim:.0%}",
+        "rep_cc_agree": "### Согласны (вероятно ок): {n}",
+        "q_almost_empty": "почти пусто ({n} симв.)",
+        "q_garbled": "искажённых слов {share:.0%}",
+        "q_illegible": "меток [неразборчиво] {share:.0%}",
+        "q_replacement": "символов-замен {n}",
+        "q_high_noise": "высокий шум",
+        "q_moderate_noise": "умеренный шум",
+        "q_missing_pages": "нет страниц: {pages}",
+        "q_empty_pages": "пустые страницы: {pages}",
+        "diff_engine1": "Движок 1 (основной)",
+        "diff_engine2": "Движок 2 ({svc})",
         # --- сообщения GUI в логе и статусе ---
         "gui_intro_digital": "Цифровые PDF берутся из текстового слоя напрямую (без OCR), сканы и картинки — через OCR.",
         "gui_intro_office": "Word/Excel/PPTX/HTML/CSV/EPUB и т.п. конвертируются напрямую через MarkItDown (без OCR).",
@@ -312,6 +353,47 @@ MESSAGES = {
                               "Then run in a terminal: ollama pull {model}",
         "ollama_request_failed": "Could not reach Ollama: {e}",
         "empty_answer": "[empty answer]",
+        # --- report.md and reasons ---
+        "rep_title": "# OCR reliability report",
+        "rep_summary": "Total: {total} · reliable {reliable} · review {review} · suspicious {suspicious}",
+        "rep_disclaimer": "The assessment is heuristic: it catches obvious garbage (empty output, "
+                          "[неразборчиво] (illegible) marks, garbled words), but NOT a plausible-looking "
+                          "misreading. Check the documents listed below against the originals.",
+        "rep_suspicious": "## Suspicious — check against the original",
+        "rep_review": "## Worth a look",
+        "rep_none": "No suspicious documents found.",
+        "rep_pages_title": "## PDF page check",
+        "rep_pages_summary": "PDFs: {total} · all pages present {ok} · mismatches {problem} · not verified {unverified}",
+        "rep_pages_note": "The source's page count is compared with the marked pages of the result "
+                          "(`<!-- page N -->` markers in the .md). An empty page is, for example, a scan "
+                          "pasted into a digital PDF without a text layer, or a page OCR failed to read.",
+        "rep_pages_problems": "### Mismatches — check against the original",
+        "rep_pages_found": "{found} of {total} recognized",
+        "rep_pages_missing": "missing: {pages}",
+        "rep_pages_empty": "empty: {pages}",
+        "rep_pages_unverified": "### Not verified: {n}",
+        "rep_pages_unverified_note": "The result has no page markers: LlamaParse and GLM-OCR do not provide them, "
+                                     "Gemini may have ignored the instruction, or the .md comes from a previous "
+                                     "version or the OCR cache.",
+        "rep_more": "- … and {n} more",
+        "rep_cc_title": "## Two-engine cross-check (second engine: {svc})",
+        "rep_cc_summary": "Checked {checked}: agree {agree}, disagree {disagree}.",
+        "rep_cc_note": "The cross-check shows DISAGREEMENT, not which engine is right. Where they disagree, "
+                       "open the diff and compare with the original. Where they agree it is probably fine, "
+                       "but if both made the same mistake, it does not show here.",
+        "rep_cc_disagree": "### Disagree — open the diff",
+        "rep_cc_similarity": "similarity {sim:.0%}",
+        "rep_cc_agree": "### Agree (probably fine): {n}",
+        "q_almost_empty": "almost empty ({n} chars)",
+        "q_garbled": "garbled words {share:.0%}",
+        "q_illegible": "[неразборчиво] (illegible) marks {share:.0%}",
+        "q_replacement": "replacement characters {n}",
+        "q_high_noise": "high noise",
+        "q_moderate_noise": "moderate noise",
+        "q_missing_pages": "missing pages: {pages}",
+        "q_empty_pages": "empty pages: {pages}",
+        "diff_engine1": "Engine 1 (primary)",
+        "diff_engine2": "Engine 2 ({svc})",
         # --- GUI log and status messages ---
         "gui_intro_digital": "Digital PDFs are read from the text layer directly (no OCR); scans and images go through OCR.",
         "gui_intro_office": "Word/Excel/PPTX/HTML/CSV/EPUB etc. are converted directly via MarkItDown (no OCR).",

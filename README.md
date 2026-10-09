@@ -79,7 +79,9 @@ Linux, `brew install python-tk` on macOS. To diagnose the environment, run
 > **"Reliable" means "no obvious garbage found", not "accurate".** A misread figure or
 > name that looks plausible will pass this check. Verify key details against the original.
 
-> The report itself is currently written in Russian, regardless of the interface language.
+> The report is written in the interface language (English or Russian). In `report.json` the
+> `level` field keeps fixed machine codes — `надёжно` (reliable), `проверить` (review),
+> `сомнительно` (suspicious) — so scripts do not depend on the language.
 
 #### How the page check works
 
@@ -235,7 +237,7 @@ The tests never call the real OCR APIs — service responses are replaced with s
 2. Option to cross-check *all* documents with a second engine, not only suspicious ones
 3. Page numbers in answer sources (the markers are already in the `.md` files)
 4. Replace the numpy index with sqlite-vec or FAISS for large collections
-5. English quality report; screenshots
+5. Screenshots
 6. Optional local `marker` backend (`--disable_ocr`) for complex multi-column digital PDFs — no API key needed
 
 ## License
